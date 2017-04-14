@@ -90,7 +90,7 @@ function requestPdfData(stockCode,date){
 	var options = createRequestOptions(stockCode,date);
 	request(options,function(err,response,body){
 		if(err || !body){
-			console.log(stockCode+"没有抓取到数据");
+			console.log(stockCode+"当前日期("+options.qs.beginDate+"到"+options.qs.endDate+")没有抓取到数据");
 			ep.emit("requestPdfData");
 			return false;
 		}
@@ -113,6 +113,7 @@ function requestPdfData(stockCode,date){
 					SSEDate : data.result[i].SSEDate,
 					reportType : "year"
 				})
+
 			}
 
 			db.annualReportPdfUrl.insert(urlData,function(err,result){

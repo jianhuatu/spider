@@ -2,6 +2,9 @@ var request = require("request");
 var fs = require("fs");
 var mongo = require("mongoskin");
 var eventproxy = require("eventproxy");
+var async = require("async");
+var colors = require("colors");
+
 
 var ep = new eventproxy();
 
@@ -18,13 +21,6 @@ function findStockData(){
 			console.log("查询错误");
 			return false;
 		}
-
-		//var checkPush = false;
-		// for(var i=0,ilen=result.length;i<ilen;i++){
-		// 	if(result[i]['stockCode']=="000830")checkPush=true;
-		// 	if(!checkPush)continue;
-		// 	stockData.push(result[i]);
-		// }
 		
 		stockData = result;
 		ep.emit("findStockData");
@@ -32,19 +28,78 @@ function findStockData(){
 }
 
 ep.all("findStockData",function(){
-	startDownPdf()
+	startFindUrlData()
 });
 
-function startDownPdf(){
-	ep.after("requestUrlData",stockData.length,function(){
+function startFindUrlData(){
+	ep.after("findAnnualReportPdfUrl",stockData.length,function(){
 		process.exit();
 	})
 
-	requestUrlData();
+	findAnnualReportPdfUrl();
+}
+
+var requestStockKey = 0;
+
+function findAnnualReportPdfUrl(){
+	var thisStockData = stockData[requestStockKey];
+	var stockCode = thisStockData['stockCode'];
+
+	db.annualReportPdfUrl.find({stockCode:stockCode}).toArray(function(err,result){
+		startDownPDF(result)
+	});
 }
 
 
-// var stream = fs.createWriteStream("./annualReportPdf/000637.PDF");
-// request("http://disclosure.szse.cn/finalpage/2014-04-25/63917745.PDF").pipe(stream).on("close",function(){
-// 	console.log(111);
-// })
+function startDownPDF(data){
+	ep.after("downPDF",data.length,function(){
+		if(requestStockKey==stockData.length)return false;
+
+		ep.emit("findAnnualReportPdfUrl");
+
+		requestStockKey++;
+
+		var time = Math.ceil(Math.random()*4)*1000;
+		setTimeout(findAnnualReportPdfUrl,time);
+
+	})
+	downPDF(data.splice(0,10),data);
+}
+
+function downPDF(data,allData){
+	if(!data.length)return false;
+
+	async.mapSeries(data,function(item,callback){
+		var stream = fs.createWriteStream(createPDFUrl(item));
+		var requestObj = request(item.URL).pipe(stream);
+		requestObj.on("close",function(){
+			console.log(item.stockCode+":"+item.bulletinYear+item.bulletinType+"下载成功".green);
+			ep.emit("downPDF");
+			ep.emit("overdown");
+		})
+		requestObj.on("error",function(){
+			console.log(item.stockCode+"下载错误".red);
+		})
+		callback(null,item);
+	})
+
+	ep.after("overdown",data.length,function(err,result){
+		downPDF(allData.splice(0,10),allData);
+	})
+}
+
+
+function createPDFUrl(data){
+	if(!fs.existsSync("./annualReportPdf/"+data.stockCode)){
+		fs.mkdirSync("./annualReportPdf/"+data.stockCode);
+	}
+	if(!fs.existsSync("./annualReportPdf/"+data.stockCode+"/"+data.bulletinYear)){
+		fs.mkdirSync("./annualReportPdf/"+data.stockCode+"/"+data.bulletinYear);
+	}
+	return "./annualReportPdf/"+data.stockCode+"/"+data.bulletinYear+"/"+data.title+".PDF";
+}
+
+findStockData();
+
+
+

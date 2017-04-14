@@ -27,10 +27,12 @@ function findStockData(){
 
 		var checkPush = false;
 		for(var i=0,ilen=result.length;i<ilen;i++){
-			if(result[i]['stockCode']=="000830")checkPush=true;
+			if(result[i]['stockCode']=="000090")checkPush=true;
 			if(!checkPush)continue;
 			stockData.push(result[i]);
+			// break;
 		}
+
 		// stockData = result;
 		ep.emit("findStockData");
 	});
@@ -129,7 +131,7 @@ function requestPdfData(stockCode,date){
 			// console.log(date);
 
 			var $ = cheerio.load(result.text,{decodeEntities: false});
-			var data = createPdfData(stockCode,$);
+			var data = createPdfData(stockCode,$,sendData.startTime,sendData.endTime);
 			// console.log(data);
 			// return false;
 
@@ -164,7 +166,7 @@ function requestPdfData(stockCode,date){
 		})
 }
 
-function createPdfData(stockCode,$){
+function createPdfData(stockCode,$,startTime,endTime){
 	var tableObj = $("table[align='right']");
 	var trObj =tableObj.find("tr");
 	var data = {result:[]};
@@ -182,13 +184,43 @@ function createPdfData(stockCode,$){
 		var aObj = tdObj.find("a");
 		var spanObj = tdObj.find("span");
 		var aText = aObj.text();
+		// console.log(aText);
 		if(aText.indexOf("：")>-1){
 			var aTextArr = aText.split("：");
+			var aTextYear = aTextArr[1].split("年");
+		}else if(/[一二三四五六七八九零][O0零一二三四五六七八九]{2}[一二三四五六七八九零]/g.test(aText)){
+			var year = /[一二三四五六七八九零][O0零一二三四五六七八九]{2}[一二三四五六七八九零]/g.exec(aText)[0];
+
+			year = year.replace(/一/g,1);
+			year = year.replace(/二/g,2);
+			year = year.replace(/三/g,3);
+			year = year.replace(/四/g,4);
+			year = year.replace(/五/g,5);
+			year = year.replace(/六/g,6);
+			year = year.replace(/七/g,7);
+			year = year.replace(/八/g,8);
+			year = year.replace(/九/g,9);
+			year = year.replace(/零/g,0);
+			year = year.replace(/\O/g,"O");
+
+			var aTextArr = aText.split(/[一二三四五六七八九零][]{2}[一二三四五六七八九零]/g);
+			aTextArr[1] = year+aTextArr[1];
+			var aTextYear = aTextArr[1].split("年");
+		}else if(aText.indexOf("204年年")>-1){
+			var year = "2004";
+			var aTextArr = aText.split("204");
+			aTextArr[1] = year+aTextArr[1];
 			var aTextYear = aTextArr[1].split("年");
 		}else{
 			var year = /\d{4}/g.exec(aText);
 			if(!year){
-				year = /\d{1}OO\d{1}/g.exec(aText);
+				var yearArr = /\d{1}OO\d{1}/g.exec(aText);
+				if(!yearArr){
+					console.log(stockCode+"当前日期"+startTime+"到"+endTime+"没有年份数据");
+					return data;
+				}
+				year = yearArr[0];
+				year.replace("OO","00")
 				var aTextArr = aText.split(/\d{1}OO\d{1}/g);
 			}else{
 				var aTextArr = aText.split(/\d{4}/g);
